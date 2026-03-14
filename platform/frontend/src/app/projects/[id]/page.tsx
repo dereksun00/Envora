@@ -194,11 +194,11 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         ) : (
           <div className="grid gap-3">
             {project.scenarios.map((scenario) => (
-              <Card key={scenario.id}>
-                <CardContent className="py-4 flex items-center justify-between">
+              <Card key={scenario.id} className="overflow-hidden">
+                <CardContent className="py-4 flex items-start justify-between">
                   <div className="flex-1 min-w-0 mr-4">
                     <p className="font-medium">{scenario.name}</p>
-                    <p className="text-sm text-muted-foreground truncate mt-0.5">{scenario.prompt}</p>
+                    <p className="text-sm text-muted-foreground break-all mt-0.5">{scenario.prompt}</p>
                     {scenario.demoUsers && scenario.demoUsers.length > 0 && (
                       <p className="text-xs text-muted-foreground mt-1">{scenario.demoUsers.length} demo user{scenario.demoUsers.length !== 1 ? "s" : ""}</p>
                     )}

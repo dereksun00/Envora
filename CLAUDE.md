@@ -113,6 +113,7 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 | GET | `/api/projects` | List projects with scenario/sandbox counts |
 | POST | `/api/projects` | Create project |
 | GET | `/api/projects/:id` | Get project with scenarios + sandboxes |
+| DELETE | `/api/projects/:id` | Delete project |
 | POST | `/api/projects/:id/scenarios` | Create scenario |
 | PUT | `/api/projects/:id/scenarios/:scenarioId` | Update scenario |
 | DELETE | `/api/projects/:id/scenarios/:scenarioId` | Delete scenario |
@@ -144,12 +145,19 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 6. Poll for app readiness (30s timeout)
 7. Set status to "running" with URL
 
+## Known Quirks
+
+- **Scenario prompt ellipses**: Trailing `...` in a scenario prompt caused Claude to respond conversationally instead of generating SQL. `generate.ts` now strips trailing `..+` before sending to the API.
+- **sandbox-postgres host port**: If port 5432 is taken (e.g. by demo-crm-db-1), run sandbox-postgres on 5433. Update `SANDBOX_POSTGRES_PORT=5433` in `platform/backend/.env`. The container-internal port stays 5432 — only the host binding changes.
+- **Backend doesn't auto-reload `.env`**: `tsx watch` reloads on code changes only. Restart the backend manually after changing `.env`.
+
 ## Dev Setup
 
 ```bash
 # Backend
 cd platform/backend
 cp .env.example .env
+# Fill in: ANTHROPIC_API_KEY, SANDBOX_POSTGRES_PORT (5433 if 5432 is taken)
 npm install
 npx prisma db push
 npm run dev  # → localhost:4000
@@ -162,5 +170,5 @@ npm run dev  # → localhost:3001 (proxies /api to :4000)
 # Shared Postgres for sandboxes
 docker network create sandbox-net
 docker run -d --name sandbox-postgres --network sandbox-net \
-  -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+  -e POSTGRES_PASSWORD=postgres -p 5433:5432 postgres:16
 ```

@@ -2,32 +2,26 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Plus, ChevronDown, ChevronUp, ExternalLink, Rocket } from "lucide-react"
-import { getProject, createSandbox, destroySandbox } from "@/lib/api"
-import type { ProjectWithDetails, Sandbox, SandboxStatus } from "@shared/types"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
-import { Spinner } from "@/components/ui/spinner"
 import {
-  AlertDialog,
-  AlertDialogTrigger,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog"
+  Button,
+  Card,
+  Tag,
+  Icon,
+  Spinner,
+  Alert,
+  NonIdealState,
+} from "@blueprintjs/core"
+import { getProject, createSandbox, destroySandbox } from "@/lib/api"
+import type { ProjectWithDetails, Sandbox, SandboxStatus } from "../../../../shared/types"
 
-function statusBadge(status: SandboxStatus) {
-  switch (status) {
-    case "running": return <Badge variant="success">running</Badge>
-    case "provisioning": return <Badge variant="warning">provisioning</Badge>
-    case "failed": return <Badge variant="destructive">failed</Badge>
-    case "destroyed": return <Badge variant="secondary">destroyed</Badge>
+function statusTag(status: SandboxStatus) {
+  const map = {
+    running: "success" as const,
+    provisioning: "warning" as const,
+    failed: "danger" as const,
+    destroyed: "none" as const,
   }
+  return <Tag intent={map[status]} minimal round>{status}</Tag>
 }
 
 function SchemaPanel({ schema }: { schema: string }) {
@@ -37,16 +31,12 @@ function SchemaPanel({ schema }: { schema: string }) {
   const hasMore = lines.length > 20
 
   return (
-    <div className="rounded-md border border-border bg-muted/30 overflow-hidden">
-      <pre className="p-4 text-xs font-mono overflow-x-auto whitespace-pre">
-        {expanded ? schema : preview}
-      </pre>
+    <div className="schema-block">
+      <pre>{expanded ? schema : preview}</pre>
       {hasMore && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-1 px-4 py-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border transition-colors"
-        >
-          {expanded ? <><ChevronUp size={12} /> Show less</> : <><ChevronDown size={12} /> Show {lines.length - 20} more lines</>}
+        <button className="schema-toggle" onClick={() => setExpanded(!expanded)}>
+          <Icon icon={expanded ? "chevron-up" : "chevron-down"} size={12} />
+          {expanded ? "Show less" : `Show ${lines.length - 20} more lines`}
         </button>
       )}
     </div>
@@ -54,10 +44,13 @@ function SchemaPanel({ schema }: { schema: string }) {
 }
 
 function SandboxRow({ sandbox, onDestroy }: { sandbox: Sandbox; onDestroy: () => void }) {
+  const router = useRouter()
   const [destroying, setDestroying] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   async function handleDestroy() {
     setDestroying(true)
+    setConfirmOpen(false)
     try {
       await destroySandbox(sandbox.id)
       onDestroy()
@@ -67,49 +60,34 @@ function SandboxRow({ sandbox, onDestroy }: { sandbox: Sandbox; onDestroy: () =>
   }
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-border last:border-0">
-      <div className="flex items-center gap-3 min-w-0">
-        {statusBadge(sandbox.status)}
-        <span className="text-xs text-muted-foreground font-mono">{sandbox.id.slice(0, 8)}</span>
-        {sandbox.url && (
-          <a
-            href={sandbox.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-foreground hover:text-muted-foreground truncate"
-          >
-            <ExternalLink size={10} className="shrink-0" />
-            {sandbox.url}
-          </a>
-        )}
+    <>
+      <div className="sandbox-row">
+        <div className="sandbox-row-left">
+          {statusTag(sandbox.status)}
+          <span className="sandbox-id" onClick={() => router.push(`/sandboxes/${sandbox.id}`)}>
+            {sandbox.id.slice(0, 12)}
+          </span>
+          {sandbox.url && (
+            <a href={sandbox.url} target="_blank" rel="noopener noreferrer" className="sandbox-url">
+              <Icon icon="share" size={10} /> {sandbox.url}
+            </a>
+          )}
+        </div>
+        <div className="sandbox-row-right">
+          <span className="sandbox-time">{new Date(sandbox.createdAt).toLocaleString()}</span>
+          {sandbox.status !== "destroyed" && (
+            <Button small minimal intent="danger" icon="trash" loading={destroying}
+              onClick={() => setConfirmOpen(true)}>
+              Destroy
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0 ml-4">
-        <span className="text-xs text-muted-foreground">{new Date(sandbox.createdAt).toLocaleString()}</span>
-        {sandbox.status !== "destroyed" && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                Destroy
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Destroy sandbox?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will stop the container and delete the database. This cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDestroy} disabled={destroying}>
-                  {destroying ? "Destroying..." : "Destroy"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
-      </div>
-    </div>
+      <Alert isOpen={confirmOpen} onConfirm={handleDestroy} onCancel={() => setConfirmOpen(false)}
+        intent="danger" icon="trash" confirmButtonText="Destroy" cancelButtonText="Cancel">
+        <p>This will stop the container and delete the database. This cannot be undone.</p>
+      </Alert>
+    </>
   )
 }
 
@@ -120,9 +98,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
   const [launchingScenario, setLaunchingScenario] = useState<string | null>(null)
 
   function load() {
-    getProject(params.id)
-      .then(setProject)
-      .finally(() => setLoading(false))
+    getProject(params.id).then(setProject).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [params.id])
@@ -137,84 +113,62 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Spinner size={24} className="text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (!project) {
-    return <div className="text-muted-foreground">Project not found.</div>
-  }
+  if (loading) return <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}><Spinner size={30} /></div>
+  if (!project) return <NonIdealState icon="search" title="Project not found" />
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      <div>
-        <button
-          onClick={() => router.push("/")}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
-        >
-          <ArrowLeft size={16} />
-          Back to Dashboard
-        </button>
-        <h1 className="text-2xl font-semibold">{project.name}</h1>
-        <p className="font-mono text-sm text-muted-foreground mt-1">{project.dockerImage}</p>
-      </div>
+    <div className="page-container">
+      <button className="back-link" onClick={() => router.push("/")}>
+        <Icon icon="arrow-left" size={14} /> Back to Dashboard
+      </button>
+
+      <h1 className="page-title">{project.name}</h1>
+      <p className="page-subtitle" style={{ fontFamily: "monospace" }}>{project.dockerImage}</p>
 
       {/* Schema */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm text-muted-foreground">Schema ({project.schemaFormat})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <SchemaPanel schema={project.schema} />
-        </CardContent>
-      </Card>
+      <div style={{ marginTop: 32 }}>
+        <h3 style={{ fontSize: 12, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", opacity: 0.5, marginBottom: 12 }}>
+          Schema ({project.schemaFormat})
+        </h3>
+        <SchemaPanel schema={project.schema} />
+      </div>
 
       {/* Scenarios */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Scenarios</h2>
-          <Button size="sm" onClick={() => router.push(`/projects/${params.id}/scenarios/new`)}>
-            <Plus size={14} />
+      <div style={{ marginTop: 32 }}>
+        <div className="page-header">
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Scenarios</h2>
+          <Button small intent="primary" icon="plus"
+            onClick={() => router.push(`/projects/${params.id}/scenarios/new`)}>
             New Scenario
           </Button>
         </div>
 
         {project.scenarios.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border py-10 text-center">
-            <p className="text-sm text-muted-foreground mb-4">No scenarios yet. Create one to generate sandbox data.</p>
-            <Button size="sm" onClick={() => router.push(`/projects/${params.id}/scenarios/new`)}>
-              <Plus size={14} />
-              New Scenario
-            </Button>
-          </div>
+          <Card className="empty-card">
+            <NonIdealState icon="lightbulb" title="No scenarios yet"
+              description="Create a scenario to define what data the AI should generate."
+              action={<Button small intent="primary" icon="plus"
+                onClick={() => router.push(`/projects/${params.id}/scenarios/new`)}>New Scenario</Button>} />
+          </Card>
         ) : (
-          <div className="grid gap-3">
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {project.scenarios.map((scenario) => (
-              <Card key={scenario.id} className="overflow-hidden">
-                <CardContent className="py-4 flex items-start justify-between">
-                  <div className="flex-1 min-w-0 mr-4">
-                    <p className="font-medium">{scenario.name}</p>
-                    <p className="text-sm text-muted-foreground break-all mt-0.5">{scenario.prompt}</p>
-                    {scenario.demoUsers && scenario.demoUsers.length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-1">{scenario.demoUsers.length} demo user{scenario.demoUsers.length !== 1 ? "s" : ""}</p>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleLaunch(scenario.id)}
-                    disabled={launchingScenario === scenario.id}
-                  >
-                    {launchingScenario === scenario.id ? (
-                      <><Spinner size={14} /> Launching...</>
-                    ) : (
-                      <><Rocket size={14} /> Launch Sandbox</>
-                    )}
-                  </Button>
-                </CardContent>
+              <Card key={scenario.id} className="scenario-card">
+                <div className="scenario-info">
+                  <p className="scenario-name">{scenario.name}</p>
+                  <p className="scenario-prompt">{scenario.prompt}</p>
+                  {scenario.demoUsers && scenario.demoUsers.length > 0 && (
+                    <div className="scenario-meta">
+                      <Icon icon="people" size={12} />
+                      {scenario.demoUsers.length} demo user{scenario.demoUsers.length !== 1 ? "s" : ""}
+                    </div>
+                  )}
+                </div>
+                <Button intent="success" icon={launchingScenario === scenario.id ? undefined : "rocket-slant"}
+                  loading={launchingScenario === scenario.id}
+                  onClick={() => handleLaunch(scenario.id)}>
+                  Launch Sandbox
+                </Button>
               </Card>
             ))}
           </div>
@@ -223,14 +177,12 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
 
       {/* Sandboxes */}
       {project.sandboxes.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Sandboxes</h2>
-          <Card>
-            <CardContent className="py-0 px-5">
-              {project.sandboxes.map((sandbox) => (
-                <SandboxRow key={sandbox.id} sandbox={sandbox} onDestroy={load} />
-              ))}
-            </CardContent>
+        <div style={{ marginTop: 32 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>Sandboxes</h2>
+          <Card style={{ padding: "0 20px" }}>
+            {project.sandboxes.map((sb) => (
+              <SandboxRow key={sb.id} sandbox={sb} onDestroy={load} />
+            ))}
           </Card>
         </div>
       )}

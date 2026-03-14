@@ -34,9 +34,9 @@ envora/
 │   │   └── scripts/
 │   │       └── test-pipeline.ts # E2E pipeline test (run before any UI work)
 │   ├── frontend/                # Next.js 14 App Router (port 3001)
-│   │   ├── src/app/             # 5 pages (see below)
+│   │   ├── src/app/             # 5 pages
 │   │   ├── src/lib/api.ts       # Typed fetch wrapper for backend API
-│   │   └── src/components/      # Shared UI components (shadcn/ui)
+│   │   └── src/components/      # ThemeProvider + Sidebar
 │   └── test-fixtures/           # Pre-validated demo data
 │       ├── demo-crm-schema.prisma
 │       ├── demo-seed.sql
@@ -48,7 +48,7 @@ envora/
 
 | Layer | Tech | Port |
 |-------|------|------|
-| Frontend | Next.js 14 App Router + Tailwind + shadcn/ui | 3001 |
+| Frontend | Next.js 14 App Router + **Blueprint.js** (Palantir) | 3001 |
 | Backend API | Express + TypeScript | 4000 |
 | Platform DB | SQLite via Prisma | file |
 | Sandbox DBs | Postgres 16 (Docker, one DB per sandbox) | 5432 |
@@ -65,8 +65,25 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 4. **provision.ts calls generate.ts DIRECTLY as a function import, NOT via HTTP.**
 5. **Prisma client from `lib/db.ts` only** — do NOT create new PrismaClient instances.
 6. **Docker containers use DNS name `sandbox-postgres` in DATABASE_URL, NOT localhost.**
-7. **Frontend uses shadcn/ui + Tailwind only. No CSS files except globals.css.**
-8. **Frontend pages follow the data-fetching pattern established in `app/page.tsx` (Dashboard).**
+7. **Frontend uses Blueprint.js (`@blueprintjs/core`, `@blueprintjs/icons`) + plain CSS. NO Tailwind. NO shadcn/ui.**
+8. **Blueprint dark mode: `bp5-dark` class on `<body>`. ThemeProvider in `src/components/theme-provider.tsx` manages the toggle. Components auto-adapt.**
+9. **Frontend pages follow the data-fetching pattern established in `app/page.tsx` (Dashboard).**
+
+## Frontend UI Stack
+
+- **Component library**: `@blueprintjs/core` v5 — Button, Card, Tag, Alert, Callout, FormGroup, InputGroup, TextArea, Spinner, NonIdealState, Icon, ButtonGroup
+- **Icons**: `@blueprintjs/icons` v5 — Blueprint's built-in icon set (NOT lucide-react)
+- **Dark/Light mode**: `bp5-dark` class toggle via ThemeProvider + localStorage persistence
+- **Styling**: Blueprint CSS + `globals.css` (plain CSS). No Tailwind, no CSS modules, no styled-components.
+- **Key Blueprint patterns**:
+  - `<Card interactive>` for clickable cards
+  - `<Tag intent="success" minimal round>` for status badges
+  - `<Alert>` for destructive action confirmations
+  - `<Callout intent="...">` for success/error banners
+  - `<NonIdealState>` for empty states
+  - `<FormGroup>` + `<InputGroup>` for forms
+  - `<ButtonGroup minimal>` for toggles (e.g., Prisma/SQL format)
+  - `<Spinner>` for loading states
 
 ## The 5 Frontend Pages (Build Order)
 

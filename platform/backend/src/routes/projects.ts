@@ -12,7 +12,7 @@
 
 import { Router } from "express";
 import { prisma } from "../lib/db.js";
-import { scenarioRoutes } from "./scenarios.js";
+import { scenarioRoutes, serializeScenario } from "./scenarios.js";
 import type { CreateProjectRequest } from "../../../shared/types.js";
 
 export const projectRoutes = Router();
@@ -63,5 +63,9 @@ projectRoutes.get("/:id", async (req, res) => {
     return;
   }
 
-  res.json(project);
+  // Parse JSON string fields on scenarios before sending
+  res.json({
+    ...project,
+    scenarios: project.scenarios.map(serializeScenario),
+  });
 });

@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Proxy API requests to the backend during development
   async rewrites() {
     return [
       {

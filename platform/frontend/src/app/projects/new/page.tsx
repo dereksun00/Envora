@@ -2,14 +2,18 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
+import {
+  Button,
+  Card,
+  FormGroup,
+  InputGroup,
+  TextArea,
+  ButtonGroup,
+  Callout,
+  Icon,
+} from "@blueprintjs/core"
 import { createProject } from "@/lib/api"
-import type { SchemaFormat } from "@shared/types"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent } from "@/components/ui/card"
+import type { SchemaFormat } from "../../../shared/types"
 
 export default function CreateProjectPage() {
   const router = useRouter()
@@ -35,109 +39,93 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors"
-      >
-        <ArrowLeft size={16} />
-        Back
+    <div className="page-container-sm">
+      <button className="back-link" onClick={() => router.back()}>
+        <Icon icon="arrow-left" size={14} /> Back
       </button>
 
-      <h1 className="text-2xl font-semibold mb-8">New Project</h1>
+      <h1 className="page-title mb-24">New Project</h1>
 
       <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="name">Project name</Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="My CRM Demo"
-                required
-              />
-            </div>
+        <form onSubmit={handleSubmit}>
+          <FormGroup label="Project name" labelFor="name">
+            <InputGroup
+              id="name"
+              large
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My CRM Demo"
+              required
+            />
+          </FormGroup>
 
-            <div className="space-y-2">
-              <Label htmlFor="dockerImage">Docker image</Label>
-              <Input
-                id="dockerImage"
-                value={dockerImage}
-                onChange={(e) => setDockerImage(e.target.value)}
-                placeholder="yourname/demo-crm:latest"
-                required
-              />
-            </div>
+          <FormGroup label="Docker image" labelFor="dockerImage">
+            <InputGroup
+              id="dockerImage"
+              large
+              leftIcon="box"
+              value={dockerImage}
+              onChange={(e) => setDockerImage(e.target.value)}
+              placeholder="yourname/demo-crm:latest"
+              required
+            />
+          </FormGroup>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="schema">Schema</Label>
-                <div className="flex rounded-md overflow-hidden border border-input">
-                  <button
-                    type="button"
-                    onClick={() => setSchemaFormat("prisma")}
-                    className={`px-3 py-1 text-xs transition-colors ${
-                      schemaFormat === "prisma"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Prisma
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSchemaFormat("sql")}
-                    className={`px-3 py-1 text-xs transition-colors border-l border-input ${
-                      schemaFormat === "sql"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-transparent text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    SQL
-                  </button>
-                </div>
-              </div>
-              <Textarea
-                id="schema"
-                value={schema}
-                onChange={(e) => setSchema(e.target.value)}
-                placeholder={schemaFormat === "prisma" ? "model User {\n  id Int @id @default(autoincrement())\n  ...\n}" : "CREATE TABLE users (\n  id SERIAL PRIMARY KEY,\n  ...\n);"}
-                className="font-mono text-xs"
-                rows={16}
-                required
-              />
-            </div>
+          <FormGroup
+            label="Schema"
+            labelFor="schema"
+            labelInfo={
+              <ButtonGroup minimal small style={{ marginLeft: 8 }}>
+                <Button active={schemaFormat === "prisma"} onClick={() => setSchemaFormat("prisma")} small>
+                  Prisma
+                </Button>
+                <Button active={schemaFormat === "sql"} onClick={() => setSchemaFormat("sql")} small>
+                  SQL
+                </Button>
+              </ButtonGroup>
+            }
+          >
+            <TextArea
+              id="schema"
+              className="mono-input"
+              value={schema}
+              onChange={(e) => setSchema(e.target.value)}
+              placeholder={
+                schemaFormat === "prisma"
+                  ? "model User {\n  id Int @id @default(autoincrement())\n  ...\n}"
+                  : "CREATE TABLE users (\n  id SERIAL PRIMARY KEY,\n  ...\n);"
+              }
+              rows={16}
+              fill
+              growVertically={false}
+              required
+            />
+          </FormGroup>
 
-            <div className="space-y-2">
-              <Label htmlFor="appPort">App port</Label>
-              <Input
-                id="appPort"
-                type="number"
-                value={appPort}
-                onChange={(e) => setAppPort(Number(e.target.value))}
-                min={1}
-                max={65535}
-              />
-            </div>
+          <FormGroup label="App port" labelFor="appPort">
+            <InputGroup
+              id="appPort"
+              large
+              type="number"
+              value={String(appPort)}
+              onChange={(e) => setAppPort(Number(e.target.value))}
+              style={{ maxWidth: 160 }}
+            />
+          </FormGroup>
 
-            {error && (
-              <div className="rounded-md bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
+          {error && (
+            <Callout intent="danger" icon="error" className="mb-16">
+              {error}
+            </Callout>
+          )}
 
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => router.back()}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Creating..." : "Create Project"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
+          <div className="form-actions">
+            <Button large onClick={() => router.back()}>Cancel</Button>
+            <Button large intent="primary" type="submit" loading={submitting} icon="tick">
+              Create Project
+            </Button>
+          </div>
+        </form>
       </Card>
     </div>
   )

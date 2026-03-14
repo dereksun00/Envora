@@ -2,43 +2,50 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, Box } from "lucide-react"
-import { clsx } from "clsx"
+import { Button, Icon } from "@blueprintjs/core"
+import { useTheme } from "./theme-provider"
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/", label: "Projects", icon: Box },
+  { href: "/", label: "Dashboard", icon: "dashboard" as const },
+  { href: "/projects/new", label: "New Project", icon: "plus" as const },
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { theme, toggle } = useTheme()
 
   return (
-    <div className="flex h-screen w-60 flex-col border-r border-border bg-card">
-      <div className="flex h-14 items-center border-b border-border px-5">
-        <span className="text-base font-semibold tracking-tight">Envora</span>
+    <div className="app-sidebar">
+      <div className="app-sidebar-brand">
+        <Icon icon="cube" size={18} style={{ color: "#2d72d2" }} />
+        <span>Envora</span>
       </div>
-      <nav className="flex flex-col gap-1 p-3">
+      <nav className="app-sidebar-nav">
         {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
+          const isActive =
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)
           return (
             <Link
               key={item.label}
               href={item.href}
-              className={clsx(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                isActive
-                  ? "bg-accent text-accent-foreground font-medium"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
+              className={`nav-link${isActive ? " active" : ""}`}
             >
-              <Icon size={16} />
+              <Icon icon={item.icon} size={16} />
               {item.label}
             </Link>
           )
         })}
       </nav>
+      <div className="app-sidebar-footer">
+        <Button
+          minimal
+          fill
+          icon={theme === "dark" ? "flash" : "moon"}
+          onClick={toggle}
+          alignText="left"
+          text={theme === "dark" ? "Light mode" : "Dark mode"}
+        />
+      </div>
     </div>
   )
 }

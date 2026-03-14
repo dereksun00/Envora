@@ -13,6 +13,15 @@ import type { CreateScenarioRequest } from "../../../shared/types.js";
 
 export const scenarioRoutes = Router({ mergeParams: true });
 
+/** Parse JSON string fields on a scenario row so the API returns objects, not strings */
+export function serializeScenario(row: any) {
+  return {
+    ...row,
+    demoUsers: typeof row.demoUsers === "string" ? JSON.parse(row.demoUsers) : row.demoUsers,
+    featureFlags: typeof row.featureFlags === "string" ? JSON.parse(row.featureFlags) : row.featureFlags,
+  };
+}
+
 // POST /api/projects/:projectId/scenarios
 scenarioRoutes.post("/", async (req, res) => {
   const { projectId } = req.params;
@@ -40,5 +49,5 @@ scenarioRoutes.post("/", async (req, res) => {
     },
   });
 
-  res.status(201).json(scenario);
+  res.status(201).json(serializeScenario(scenario));
 });

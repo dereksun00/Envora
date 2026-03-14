@@ -20,9 +20,12 @@ import { generateSeedData } from "./generate.js";
 import { seedWithRetry } from "./seed-with-retry.js";
 import { launchContainer } from "./docker.js";
 
-const ADMIN_DB_URL =
-  process.env.ADMIN_DATABASE_URL ||
-  "postgresql://crm:crm_password@localhost:5432/postgres";
+const PG_HOST = process.env.SANDBOX_POSTGRES_HOST || "localhost";
+const PG_PORT = process.env.SANDBOX_POSTGRES_PORT || "5432";
+const PG_USER = process.env.SANDBOX_POSTGRES_USER || "postgres";
+const PG_PASS = process.env.SANDBOX_POSTGRES_PASSWORD || "postgres";
+
+const ADMIN_DB_URL = `postgresql://${PG_USER}:${PG_PASS}@${PG_HOST}:${PG_PORT}/postgres`;
 
 async function updateStatus(sandboxId: string, step: string, message: string) {
   await prisma.sandbox.update({
@@ -55,7 +58,7 @@ export async function provision(sandboxId: string): Promise<void> {
 
     // Step 2: Apply schema
     await updateStatus(sandboxId, "applying_schema", "Applying schema...");
-    const sandboxDatabaseUrl = `postgresql://crm:crm_password@localhost:5432/${databaseName}`;
+    const sandboxDatabaseUrl = `postgresql://${PG_USER}:${PG_PASS}@${PG_HOST}:${PG_PORT}/${databaseName}`;
 
     if (project.schemaFormat === "prisma") {
       const tempFile = path.join(os.tmpdir(), `schema-${sandboxId}.prisma`);
@@ -131,7 +134,7 @@ export async function provision(sandboxId: string): Promise<void> {
     // Step 5: Launch container
     await updateStatus(sandboxId, "launching_app", "Launching application...");
     // Use Docker DNS hostname "sandbox-postgres" — NOT localhost
-    const containerDatabaseUrl = `postgresql://crm:crm_password@sandbox-postgres:5432/${databaseName}`;
+    const containerDatabaseUrl = `postgresql://${PG_USER}:${PG_PASS}@${process.env.SANDBOX_POSTGRES_CONTAINER || "sandbox-postgres"}:5432/${databaseName}`;
     const { containerId, hostPort } = await launchContainer(
       project.dockerImage,
       containerDatabaseUrl,

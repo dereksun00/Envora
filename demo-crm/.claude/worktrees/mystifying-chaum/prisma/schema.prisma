@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  industry  String
+  size      String   // startup, mid_market, enterprise
+  website   String?
+  createdAt DateTime @default(now())
+
+  users    User[]
+  contacts Contact[]
+  deals    Deal[]
+}
+
+model User {
+  id             String       @id @default(cuid())
+  name           String
+  email          String       @unique
+  role           String       // admin, sales_manager, sales_rep
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+
+  deals      Deal[]
+  activities Activity[]
+}
+
+model Contact {
+  id             String       @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String       @unique
+  phone          String?
+  title          String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+
+  deals      Deal[]
+  activities Activity[]
+}
+
+model Deal {
+  id             String       @id @default(cuid())
+  name           String
+  amount         Float
+  stage          String       // prospecting, qualification, proposal, negotiation, closed_won, closed_lost
+  closeDate      DateTime?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  contactId      String
+  contact        Contact      @relation(fields: [contactId], references: [id])
+  ownerId        String
+  owner          User         @relation(fields: [ownerId], references: [id])
+  createdAt      DateTime     @default(now())
+
+  activities Activity[]
+}
+
+model Activity {
+  id          String   @id @default(cuid())
+  type        String   // call, email, meeting, note
+  subject     String
+  description String?
+  date        DateTime
+  dealId      String?
+  deal        Deal?    @relation(fields: [dealId], references: [id])
+  contactId   String?
+  contact     Contact? @relation(fields: [contactId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model DemoAccount {
+  id    String @id @default(cuid())
+  email String @unique
+  name  String
+  role  String
+}

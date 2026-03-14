@@ -8,31 +8,80 @@
 // Type refs: SeedResult from shared/types.ts
 // =============================================================================
 
+import { Client } from "pg";
+import Anthropic from "@anthropic-ai/sdk";
 import type { SeedResult } from "../../../shared/types.js";
+
+const MAX_ATTEMPTS = 3;
 
 /**
  * Execute SQL against the sandbox database with AI-powered retry.
- *
- * @param databaseUrl - Postgres connection string for the sandbox DB
- * @param sql - SQL INSERT statements to execute
- * @param schema - Original schema text (sent to Claude on retry for context)
- * @param schemaFormat - "prisma" or "sql"
- * @returns SeedResult with success status, final SQL, and attempt count
  */
 export async function seedWithRetry(
-  _databaseUrl: string,
-  _sql: string,
-  _schema: string,
-  _schemaFormat: string
+  databaseUrl: string,
+  sql: string,
+  schema: string,
+  schemaFormat: string
 ): Promise<SeedResult> {
-  // TODO: Implement
-  // 1. Connect to sandbox DB via pg client
-  // 2. Execute SQL in a transaction
-  // 3. On success: return { success: true, finalSQL: sql, attempts: 1 }
-  // 4. On failure:
-  //    a. Send { sql, schema, error } to Claude API asking for fixed SQL
-  //    b. Retry with the corrected SQL
-  //    c. Repeat up to 3 times
-  // 5. On final failure: return { success: false, finalSQL, attempts, lastError }
-  throw new Error("Not implemented");
+  let currentSQL = sql;
+  let lastError = "";
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const client = new Client({ connectionString: databaseUrl });
+    try {
+      await client.connect();
+      await client.query("BEGIN");
+      await client.query(currentSQL);
+      await client.query("COMMIT");
+      return { success: true, finalSQL: currentSQL, attempts: attempt };
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      try {
+        await client.query("ROLLBACK");
+      } catch {}
+
+      if (attempt < MAX_ATTEMPTS) {
+        // Ask Claude to fix the SQL
+        const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const response = await anthropic.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8192,
+          messages: [
+            {
+              role: "user",
+              content: `The following SQL failed with this Postgres error:
+
+Error: ${lastError}
+
+Schema (${schemaFormat}):
+${schema}
+
+Failed SQL:
+${currentSQL}
+
+Please return corrected SQL INSERT statements only. No markdown fences, no commentary.`,
+            },
+          ],
+        });
+
+        const content = response.content[0];
+        if (content.type === "text") {
+          let fixed = content.text;
+          fixed = fixed.replace(/^```sql\s*/i, "").replace(/^```\s*/m, "").replace(/\s*```$/i, "").trim();
+          currentSQL = fixed;
+        }
+      }
+    } finally {
+      try {
+        await client.end();
+      } catch {}
+    }
+  }
+
+  return {
+    success: false,
+    finalSQL: currentSQL,
+    attempts: MAX_ATTEMPTS,
+    lastError,
+  };
 }

@@ -11,7 +11,9 @@
 // =============================================================================
 
 import { Router } from "express";
+import { prisma } from "../lib/db.js";
 import { scenarioRoutes } from "./scenarios.js";
+import type { CreateProjectRequest } from "../../../shared/types.js";
 
 export const projectRoutes = Router();
 
@@ -20,21 +22,46 @@ projectRoutes.use("/:projectId/scenarios", scenarioRoutes);
 
 // GET /api/projects
 projectRoutes.get("/", async (_req, res) => {
-  // TODO: Implement — fetch all projects from Prisma (SQLite)
-  // Return: Project[]
-  res.json([]);
+  const projects = await prisma.project.findMany({
+    orderBy: { createdAt: "desc" },
+  });
+  res.json(projects);
 });
 
 // POST /api/projects
 projectRoutes.post("/", async (req, res) => {
-  // TODO: Implement — validate CreateProjectRequest, create via Prisma
-  // Return: 201 + Project
-  res.status(501).json({ error: "Not implemented" });
+  const { name, dockerImage, schema, schemaFormat, appPort } =
+    req.body as CreateProjectRequest;
+
+  if (!name || !dockerImage || !schema) {
+    res.status(400).json({ error: "name, dockerImage, and schema are required" });
+    return;
+  }
+
+  const project = await prisma.project.create({
+    data: {
+      name,
+      dockerImage,
+      schema,
+      schemaFormat: schemaFormat ?? "prisma",
+      appPort: appPort ?? 3000,
+    },
+  });
+
+  res.status(201).json(project);
 });
 
 // GET /api/projects/:id
 projectRoutes.get("/:id", async (req, res) => {
-  // TODO: Implement — fetch project by ID with include: { scenarios, sandboxes }
-  // Return: ProjectWithDetails
-  res.status(501).json({ error: "Not implemented" });
+  const project = await prisma.project.findUnique({
+    where: { id: req.params.id },
+    include: { scenarios: true, sandboxes: true },
+  });
+
+  if (!project) {
+    res.status(404).json({ error: "Project not found" });
+    return;
+  }
+
+  res.json(project);
 });

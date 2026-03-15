@@ -15,13 +15,15 @@ datasource db {
 }
 
 model Project {
-  id           String   @id @default(cuid())
-  name         String
-  dockerImage  String
-  schema       String   // Raw Prisma schema or SQL DDL text
-  schemaFormat String   @default("prisma") // "prisma" | "sql"
-  appPort      Int      @default(3000)
-  createdAt    DateTime @default(now())
+  id            String   @id @default(cuid())
+  name          String
+  dockerImage   String
+  schema        String   // Raw Prisma schema or SQL DDL text
+  schemaFormat  String   @default("prisma") // "prisma" | "sql"
+  appPort       Int      @default(3000)
+  uiGlossary    String   @default("[]") // JSON string of GlossaryEntry[]
+  appSourceCode String?  // Optional: raw source code for glossary generation
+  createdAt     DateTime @default(now())
 
   scenarios Scenario[]
   sandboxes Sandbox[]

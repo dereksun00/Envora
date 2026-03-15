@@ -6,6 +6,7 @@ import type {
   Sandbox,
   SandboxWithContext,
   OverviewStats,
+  GlossaryEntry,
   CreateProjectRequest,
   CreateScenarioRequest,
   CreateSandboxRequest,
@@ -52,6 +53,26 @@ export function createProject(data: CreateProjectRequest): Promise<Project> {
 
 export function deleteProject(id: string): Promise<void> {
   return request(`/projects/${id}`, { method: "DELETE" });
+}
+
+export function updateGlossary(
+  projectId: string,
+  uiGlossary: GlossaryEntry[]
+): Promise<Project> {
+  return request(`/projects/${projectId}/glossary`, {
+    method: "PUT",
+    body: JSON.stringify({ uiGlossary }),
+  });
+}
+
+export function regenerateGlossary(
+  projectId: string,
+  appSourceCode?: string
+): Promise<Project> {
+  return request(`/projects/${projectId}/glossary/regenerate`, {
+    method: "POST",
+    body: JSON.stringify({ appSourceCode }),
+  });
 }
 
 // ---- Scenarios ----

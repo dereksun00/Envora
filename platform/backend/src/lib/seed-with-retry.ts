@@ -36,6 +36,20 @@ export async function seedWithRetry(
       return { success: true, finalSQL: currentSQL, attempts: attempt };
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
+      // #region agent log
+      fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+        body: JSON.stringify({
+          sessionId: "acfe58",
+          location: "seed-with-retry.ts:seedError",
+          message: "Seed attempt failed",
+          data: { attempt, lastError, errorPreview: lastError.slice(0, 500) },
+          hypothesisId: "H4",
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       try {
         await client.query("ROLLBACK");
       } catch {}
@@ -78,6 +92,20 @@ Please return corrected SQL INSERT statements only. No markdown fences, no comme
     }
   }
 
+  // #region agent log
+  fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+    body: JSON.stringify({
+      sessionId: "acfe58",
+      location: "seed-with-retry.ts:finalFailure",
+      message: "Seed failed after all retries",
+      data: { lastError, lastErrorPreview: lastError.slice(0, 500) },
+      hypothesisId: "H4",
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   return {
     success: false,
     finalSQL: currentSQL,

@@ -101,11 +101,26 @@ export async function provision(sandboxId: string): Promise<void> {
     if (scenario.generatedSQL) {
       sql = scenario.generatedSQL;
     } else {
+      // #region agent log
+      fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+        body: JSON.stringify({
+          sessionId: "acfe58",
+          location: "provision.ts:beforeGenerate",
+          message: "Calling generateSeedData",
+          data: { scenarioPrompt: scenario.prompt, scenarioId: scenario.id },
+          hypothesisId: "H1",
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       const result = await generateSeedData({
         schema: project.schema,
         schemaFormat: project.schemaFormat as "prisma" | "sql",
         scenarioPrompt: scenario.prompt,
         demoUsers: JSON.parse(scenario.demoUsers),
+        uiGlossary: JSON.parse(project.uiGlossary || "[]"),
       });
       sql = result.sql;
       // Cache the generated SQL on the scenario
@@ -123,6 +138,23 @@ export async function provision(sandboxId: string): Promise<void> {
       project.schema,
       project.schemaFormat
     );
+    // #region agent log
+    fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+      body: JSON.stringify({
+        sessionId: "acfe58",
+        location: "provision.ts:afterSeed",
+        message: "Seed completed",
+        data: { success: seedResult.success, attempts: seedResult.attempts, lastError: seedResult.lastError },
+        hypothesisId: "H4",
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (!seedResult.success) {
+      throw new Error(seedResult.lastError || "Database seeding failed");
+    }
     // Update cached SQL if retries produced a modified version
     if (seedResult.finalSQL !== sql) {
       await prisma.scenario.update({
@@ -169,6 +201,20 @@ export async function provision(sandboxId: string): Promise<void> {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // #region agent log
+    fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+      body: JSON.stringify({
+        sessionId: "acfe58",
+        location: "provision.ts:catch",
+        message: "Provisioning failed",
+        data: { error: message },
+        hypothesisId: "H4",
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     await prisma.sandbox
       .update({
         where: { id: sandboxId },

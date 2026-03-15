@@ -4,6 +4,8 @@
 
 A platform that provisions isolated demo environments (sandboxes) with AI-generated data for sales demos and QA testing. Each sandbox gets its own Postgres database and Docker container running a demo app (currently a CRM). The AI generates realistic seed data from a natural language prompt.
 
+The key innovation is the **UI Glossary** system: when a project is created, the platform automatically extracts the app's source code from its Docker image and uses Claude to build a mapping between UI labels (e.g., "Pipeline Value") and schema operations (e.g., `SUM(Deal.amount)`). This glossary is injected into the data generation prompt so the AI understands what users mean when they reference UI concepts.
+
 Teams can define reusable scenarios that control what data a sandbox contains. When a scenario runs, it produces a fresh, shareable sandbox with synthetic data, role-based access, and lifecycle controls (stop, start, reset, extend, destroy).
 
 The **demo CRM app** (`demo-crm/`) is already built and working. It's a standalone Next.js app with full CRUD. The sandbox platform treats it as an opaque Docker image.
@@ -25,14 +27,15 @@ envora/
 │   │   │   ├── index.ts         # Express entry point (port 4000)
 │   │   │   ├── routes/
 │   │   │   │   ├── overview.ts  # GET /api/overview (dashboard stats)
-│   │   │   │   ├── projects.ts  # CRUD projects (with counts)
+│   │   │   │   ├── projects.ts  # CRUD projects + glossary endpoints
 │   │   │   │   ├── scenarios.ts # CRUD scenarios (create/update/delete/duplicate)
 │   │   │   │   └── sandboxes.ts # Sandbox lifecycle (create/stop/start/reset/extend/destroy)
 │   │   │   └── lib/
 │   │   │       ├── db.ts        # Prisma client singleton
-│   │   │       ├── generate.ts  # Claude API → SQL INSERT statements
+│   │   │       ├── generate.ts  # Claude API → SQL INSERT statements (with glossary injection)
+│   │   │       ├── glossary.ts  # Claude API → extract UI-to-schema mappings from source code
 │   │   │       ├── seed-with-retry.ts  # Execute SQL with AI-powered retry
-│   │   │       ├── docker.ts    # Container lifecycle (launch/stop/start/destroy)
+│   │   │       ├── docker.ts    # Container lifecycle + source code extraction from images
 │   │   │       └── provision.ts # Orchestrator tying it all together
 │   │   └── scripts/
 │   │       └── test-pipeline.ts # E2E pipeline test
@@ -72,6 +75,36 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 8. **Blueprint dark mode: `bp5-dark` class on `<body>`. ThemeProvider manages the toggle. Components auto-adapt.**
 9. **Frontend imports shared types via `@shared/types` path alias (configured in tsconfig.json).**
 
+## UI Glossary System
+
+The glossary bridges the gap between what users see in an app's UI and the raw database schema. Without it, users say "pipeline value of 36mil" but the AI only knows about `Deal.amount` — it doesn't know "pipeline value" = `SUM(Deal.amount)`.
+
+### How It Works
+
+1. **Auto-extraction on project creation**: When a project is created, the backend extracts source code from the Docker image (fire-and-forget, doesn't block creation)
+2. **LLM analysis**: `glossary.ts` sends the extracted source + schema to Claude, which returns structured `GlossaryEntry[]` mappings
+3. **Storage**: Glossary is stored as JSON on the `Project` model (`uiGlossary` field)
+4. **Injection**: During data generation (`generate.ts`), the glossary is appended to Claude's system prompt so it knows what UI terms mean
+5. **Editable**: Users can view, edit, add, or remove glossary entries on the Project Detail page
+6. **Regenerate**: One-click button re-extracts from Docker and re-generates
+
+### GlossaryEntry Shape
+
+```typescript
+interface GlossaryEntry {
+  uiLabel: string;        // "Pipeline Value"
+  schemaMapping: string;  // "SUM(Deal.amount)"
+  description: string;    // "Total monetary value of all deals"
+}
+```
+
+### Key Files
+
+- `lib/glossary.ts` — Claude call to extract glossary from source code
+- `lib/docker.ts` → `extractSourceFromImage()` — creates temp container, extracts .ts/.tsx/.js/.jsx/.vue/.svelte files
+- `lib/generate.ts` → `buildGlossarySection()` — formats glossary entries for the system prompt
+- `routes/projects.ts` — `PUT /:id/glossary` (manual edit), `POST /:id/glossary/regenerate` (re-extract from Docker)
+
 ## Frontend UI Stack
 
 - **Component library**: `@blueprintjs/core` v5 — Button, Card, Tag, Alert, Callout, Dialog, FormGroup, InputGroup, TextArea, HTMLSelect, HTMLTable, Spinner, NonIdealState, Icon, ButtonGroup, Menu, MenuItem, Popover
@@ -86,7 +119,7 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 | `/` | **Overview dashboard** — stat cards, quick-launch widget, recent sandboxes table |
 | `/projects` | **Projects list** — card grid with scenario/sandbox counts |
 | `/projects/new` | **Create Project** — form with schema textarea, format toggle |
-| `/projects/[id]` | **Project Detail** — schema, scenario cards with hover actions (launch/edit/duplicate/delete), sandbox table, create/edit scenario dialog |
+| `/projects/[id]` | **Project Detail** — schema, UI glossary panel, scenario cards with hover actions (launch/edit/duplicate/delete), sandbox table, create/edit scenario dialog, delete project |
 | `/projects/[id]/scenarios/new` | Redirect to project detail (scenario creation uses a Dialog) |
 | `/sandboxes` | **All Sandboxes** — filterable table with lifecycle actions |
 | `/sandboxes/[id]` | **Sandbox Detail** — status badge, lifecycle controls, provisioning step indicator, URL display |
@@ -111,9 +144,11 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 |--------|------|---------|
 | GET | `/api/overview` | Dashboard stats (counts + recent sandboxes) |
 | GET | `/api/projects` | List projects with scenario/sandbox counts |
-| POST | `/api/projects` | Create project |
-| GET | `/api/projects/:id` | Get project with scenarios + sandboxes |
+| POST | `/api/projects` | Create project (auto-generates glossary from Docker image in background) |
+| GET | `/api/projects/:id` | Get project with scenarios + sandboxes + glossary |
 | DELETE | `/api/projects/:id` | Delete project |
+| PUT | `/api/projects/:id/glossary` | Update glossary manually |
+| POST | `/api/projects/:id/glossary/regenerate` | Re-extract source from Docker image + regenerate glossary |
 | POST | `/api/projects/:id/scenarios` | Create scenario |
 | PUT | `/api/projects/:id/scenarios/:scenarioId` | Update scenario |
 | DELETE | `/api/projects/:id/scenarios/:scenarioId` | Delete scenario |
@@ -139,7 +174,7 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 
 1. Create Postgres database
 2. Apply schema (Prisma db push or raw SQL)
-3. Generate seed data via Claude API (or use cached SQL)
+3. Generate seed data via Claude API (with UI glossary context, or use cached SQL)
 4. Seed database with retry loop
 5. Launch Docker container
 6. Poll for app readiness (30s timeout)
@@ -150,6 +185,8 @@ Frontend proxies `/api/*` to `localhost:4000` via Next.js rewrites.
 - **Scenario prompt ellipses**: Trailing `...` in a scenario prompt caused Claude to respond conversationally instead of generating SQL. `generate.ts` now strips trailing `..+` before sending to the API.
 - **sandbox-postgres host port**: If port 5432 is taken (e.g. by demo-crm-db-1), run sandbox-postgres on 5433. Update `SANDBOX_POSTGRES_PORT=5433` in `platform/backend/.env`. The container-internal port stays 5432 — only the host binding changes.
 - **Backend doesn't auto-reload `.env`**: `tsx watch` reloads on code changes only. Restart the backend manually after changing `.env`.
+- **Glossary auto-generation is fire-and-forget**: When creating a project, glossary generation runs asynchronously. If you open the project detail immediately, the glossary may not be ready yet. Refresh after a few seconds.
+- **SQL caching**: Generated SQL is cached on the Scenario (`generatedSQL` field). First launch is slow (Claude API call), subsequent launches of the same scenario reuse cached SQL. To regenerate data, create a new scenario or clear the cache.
 
 ## Dev Setup
 

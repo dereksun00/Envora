@@ -40,6 +40,7 @@ export interface Project {
   schema: string;
   schemaFormat: SchemaFormat;
   appPort: number;
+  uiGlossary: GlossaryEntry[];
   createdAt: string; // ISO 8601
 }
 
@@ -58,6 +59,12 @@ export interface DemoUser {
   name: string;
   email: string;
   role: string;
+}
+
+export interface GlossaryEntry {
+  uiLabel: string;        // What users see in the app UI (e.g., "Pipeline Value")
+  schemaMapping: string;  // How it maps to schema (e.g., "SUM(Deal.amount)")
+  description: string;    // Plain English explanation
 }
 
 export interface Sandbox {
@@ -100,6 +107,8 @@ export interface CreateProjectRequest {
   schema: string;
   schemaFormat: SchemaFormat;
   appPort?: number; // defaults to 3000
+  appSourceCode?: string; // optional: app source code for auto-generating UI glossary
+  uiGlossary?: GlossaryEntry[]; // optional: manual glossary entries
 }
 
 export interface CreateScenarioRequest {
@@ -159,6 +168,7 @@ export interface GenerateDataParams {
   schemaFormat: SchemaFormat;
   scenarioPrompt: string;
   demoUsers: DemoUser[];
+  uiGlossary?: GlossaryEntry[];
 }
 
 export interface GenerateDataResult {

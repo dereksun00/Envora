@@ -9,7 +9,21 @@
 // =============================================================================
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { GenerateDataParams, GenerateDataResult } from "../../../shared/types.js";
+import type { GenerateDataParams, GenerateDataResult, GlossaryEntry } from "../../../shared/types.js";
+
+function buildGlossarySection(glossary: GlossaryEntry[]): string {
+  if (glossary.length === 0) return "";
+  const entries = glossary
+    .map((g) => `- "${g.uiLabel}" → ${g.schemaMapping} — ${g.description}`)
+    .join("\n");
+  return `
+
+UI Glossary — these are concepts the user may reference in their scenario prompt.
+When the user mentions any of these terms, use the schema mapping to generate data that produces the correct result:
+${entries}
+
+CRITICAL: If the scenario mentions a target for any glossary term (e.g., "pipeline value of $36M"), you MUST ensure the generated data's aggregation matches that target exactly. Use the scratchpad to plan and verify.`;
+}
 
 /**
  * Generate SQL INSERT statements using Claude API.
@@ -30,7 +44,7 @@ Rules (MUST follow all):
 - Match exact enum casing from the schema (e.g., 'mid_market' not 'Mid_Market', 'closed_won' not 'Closed_Won')
 - If the scenario specifies any numeric targets or totals (e.g. "2.1 million pipeline", "500k revenue", "1.5 billion ARR"), you MUST use a <scratchpad> first: list every row value you plan to insert, sum them, and adjust until they match the target exactly — THEN write the SQL
 - Output format: optional <scratchpad>...</scratchpad> block first, then raw SQL INSERT statements. The scratchpad will be stripped from the final output
-- Every INSERT statement must end with a semicolon`;
+- Every INSERT statement must end with a semicolon${buildGlossarySection(params.uiGlossary || [])}`;
 
   const demoUsersText =
     params.demoUsers.length > 0
@@ -38,6 +52,21 @@ Rules (MUST follow all):
       : "";
 
   const scenarioPrompt = params.scenarioPrompt.replace(/\.{2,}\s*$/, "").trim();
+
+  // #region agent log
+  fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+    body: JSON.stringify({
+      sessionId: "acfe58",
+      location: "generate.ts:entry",
+      message: "generateSeedData called",
+      data: { rawPrompt: params.scenarioPrompt, trimmedPrompt: scenarioPrompt, promptLength: scenarioPrompt.length },
+      hypothesisId: "H1",
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   const userPrompt = `Generate SQL INSERT statements for the following ${params.schemaFormat === "prisma" ? "Prisma" : "SQL"} schema.
 
@@ -55,10 +84,41 @@ Scenario: ${scenarioPrompt}${demoUsersText}`;
 
   const content = response.content[0];
   if (content.type !== "text") {
+    // #region agent log
+    fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+      body: JSON.stringify({
+        sessionId: "acfe58",
+        location: "generate.ts:nonText",
+        message: "Claude returned non-text content",
+        data: { contentType: content.type },
+        hypothesisId: "H5",
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     throw new Error("Unexpected response type from Claude API");
   }
 
   let sql = content.text;
+
+  // #region agent log
+  fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+    body: JSON.stringify({
+      sessionId: "acfe58",
+      location: "generate.ts:response",
+      message: "Claude response received",
+      data: { sqlLength: sql.length, hasInsert: /INSERT\s+INTO/i.test(sql), sqlPreview: sql.slice(0, 400) },
+      hypothesisId: "H2",
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  console.log("\n========== RAW CLAUDE RESPONSE ==========\n", sql, "\n=========================================\n");
 
   // Strip scratchpad block if present
   sql = sql.replace(/<scratchpad>[\s\S]*?<\/scratchpad>/i, "").trim();
@@ -68,6 +128,20 @@ Scenario: ${scenarioPrompt}${demoUsersText}`;
 
   // Validate output contains INSERT statements
   if (!/INSERT\s+INTO/i.test(sql)) {
+    // #region agent log
+    fetch("http://127.0.0.1:7765/ingest/0edf77b0-9378-4eb7-9c79-05a81878ca9b", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "acfe58" },
+      body: JSON.stringify({
+        sessionId: "acfe58",
+        location: "generate.ts:noInsert",
+        message: "Generated output has no INSERT statements",
+        data: { sqlPreview: sql.slice(0, 600) },
+        hypothesisId: "H5",
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
     throw new Error("Generated output does not contain any INSERT statements");
   }
 

@@ -13,6 +13,7 @@
 // =============================================================================
 
 import Docker from "dockerode";
+import { execSync } from "child_process";
 import type { ContainerInfo } from "../../../shared/types.js";
 
 /**
@@ -64,6 +65,51 @@ export async function startContainer(containerId: string): Promise<number> {
   const ports = info.NetworkSettings.Ports;
   const firstBinding = Object.values(ports).find((b) => b && b.length > 0);
   return parseInt(firstBinding?.[0]?.HostPort ?? "0", 10);
+}
+
+/**
+ * Extract source code from a Docker image by creating a temp container
+ * and copying files out. Returns concatenated source as a single string.
+ */
+export async function extractSourceFromImage(dockerImage: string): Promise<string> {
+  const docker = new Docker();
+  const containerName = `glossary-extract-${Date.now()}`;
+
+  // Create container without starting it
+  const container = await docker.createContainer({
+    Image: dockerImage,
+    name: containerName,
+    Cmd: ["true"],
+  });
+
+  try {
+    // Common source directories in Docker images
+    const dirs = ["/app/src", "/app/app", "/app/pages", "/app/components", "/src", "/app"];
+    // File extensions to include
+    const exts = "tsx,ts,jsx,js,vue,svelte,html";
+
+    let source = "";
+
+    for (const dir of dirs) {
+      try {
+        // Use docker cp via CLI to extract, then read files
+        const result = execSync(
+          `docker run --rm --entrypoint="" ${dockerImage} sh -c "find ${dir} -type f \\( ${exts.split(",").map(e => `-name '*.${e}'`).join(" -o ")} \\) 2>/dev/null | head -50 | while read f; do echo '===FILE:' \\$f '==='; cat \\$f 2>/dev/null; done"`,
+          { encoding: "utf8", timeout: 30_000, maxBuffer: 5 * 1024 * 1024 }
+        );
+        if (result.trim()) {
+          source += result;
+          break; // Found source in this dir, stop looking
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return source;
+  } finally {
+    try { await container.remove({ force: true }); } catch {}
+  }
 }
 
 /**
